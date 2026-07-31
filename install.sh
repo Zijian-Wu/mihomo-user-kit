@@ -10,7 +10,7 @@ CONFIG_ROOT="${MIHOMO_CONFIG_DIR:-$HOME/.config/mihomo}"
 CENTRAL_MIHORO_CONFIG="$CONFIG_ROOT/mihoro.toml"
 DEFAULT_MIHORO_CONFIG="$HOME/.config/mihoro.toml"
 SHELL_CONFIG_DIR="$CONFIG_ROOT/shell"
-MIHORO_INSTALL_URL="${MIHORO_INSTALL_URL:-https://raw.githubusercontent.com/spencerwooo/mihoro/main/install.sh}"
+MIHORO_RELEASE_API="${MIHORO_RELEASE_API:-https://api.github.com/repos/spencerwooo/mihoro/releases/latest}"
 
 RUN_INIT=0
 ENABLE_CODEX=0
@@ -31,9 +31,12 @@ Environment:
   MIHOMO_USER_KIT_REPOSITORY  Source repository for helper scripts
   MIHOMO_USER_KIT_REF         Source branch or tag (default: main)
   MIHOMO_USER_KIT_RAW_BASE    Override the raw download base URL
-  MIHORO_INSTALL_URL          Override the official Mihoro installer URL
   MIHOMO_CONFIG_DIR           Override the centralized config directory
+  MIHORO_TARGET               Override the Mihoro release target triple
+  MIHORO_RELEASE_API          Override the Mihoro latest-release API URL
+  MIHORO_GITHUB_MIRROR        Prefix GitHub artifact downloads with a mirror
 
+By default, the latest x86_64 or aarch64 Linux musl build of Mihoro is used.
 The installer never runs sudo, a system package manager, systemctl, or
 configures boot-time startup.
 USAGE
@@ -57,7 +60,7 @@ while (( $# > 0 )); do
   shift
 done
 
-required_commands=(bash sh curl tar tmux mktemp install ln mv readlink grep touch uname mkdir rm dirname cut head tail)
+required_commands=(bash sh curl tar tmux mktemp install ln mv readlink grep touch uname mkdir rm dirname cut head)
 optional_commands=(git bwrap zsh)
 missing_required=()
 missing_optional=()
@@ -70,8 +73,27 @@ for command_name in "${optional_commands[@]}"; do
   command -v "$command_name" >/dev/null 2>&1 || missing_optional+=("$command_name")
 done
 
+detect_mihoro_target() {
+  if [[ -n "${MIHORO_TARGET:-}" ]]; then
+    printf '%s\n' "$MIHORO_TARGET"
+    return 0
+  fi
+
+  case "$(uname -m)" in
+    x86_64|amd64) printf '%s\n' 'x86_64-unknown-linux-musl' ;;
+    aarch64|arm64) printf '%s\n' 'aarch64-unknown-linux-musl' ;;
+    *)
+      echo "Unsupported architecture: $(uname -m)" >&2
+      echo 'Set MIHORO_TARGET to a release target provided by Mihoro.' >&2
+      return 1
+      ;;
+  esac
+}
+
+MIHORO_RESOLVED_TARGET="$(detect_mihoro_target)"
 printf 'HOME: %s\n' "$HOME"
 printf 'Architecture: %s\n' "$(uname -m)"
+printf 'Mihoro target: %s\n' "$MIHORO_RESOLVED_TARGET"
 printf 'Config directory: %s\n' "$CONFIG_ROOT"
 
 if (( ${#missing_required[@]} > 0 )); then
@@ -142,6 +164,49 @@ asset_path() {
   ASSET_RESULT="$downloaded_path"
 }
 
+install_mihoro() {
+  if [[ -z "$TEMP_DIR" ]]; then
+    TEMP_DIR="$(mktemp -d)"
+  fi
+
+  local release_json package_url download_url archive extract_dir
+  release_json="$(curl -fsSL "$MIHORO_RELEASE_API")"
+  package_url="$(
+    printf '%s\n' "$release_json" \
+      | grep '"browser_download_url"' \
+      | cut -d '"' -f 4 \
+      | grep -- "-${MIHORO_RESOLVED_TARGET}\\.tar\\.gz$" \
+      | head -n 1 \
+      || true
+  )"
+
+  if [[ -z "$package_url" ]]; then
+    echo "No Mihoro release asset found for: $MIHORO_RESOLVED_TARGET" >&2
+    return 1
+  fi
+
+  download_url="$package_url"
+  if [[ -n "${MIHORO_GITHUB_MIRROR:-}" ]]; then
+    download_url="${MIHORO_GITHUB_MIRROR%/}/$package_url"
+  fi
+
+  archive="$TEMP_DIR/mihoro.tar.gz"
+  extract_dir="$TEMP_DIR/mihoro-extract"
+  mkdir -p "$extract_dir"
+
+  echo "Downloading Mihoro ($MIHORO_RESOLVED_TARGET) ..."
+  curl -fL "$download_url" -o "$archive"
+  tar -xzf "$archive" -C "$extract_dir"
+
+  if [[ ! -f "$extract_dir/mihoro" ]]; then
+    echo 'The Mihoro archive did not contain the expected `mihoro` binary.' >&2
+    return 1
+  fi
+
+  install -m 0755 "$extract_dir/mihoro" "$LOCAL_BIN/mihoro"
+  echo "Installed Mihoro to: $LOCAL_BIN/mihoro"
+}
+
 # Keep the actual Mihoro config inside the centralized Mihomo directory while
 # preserving Mihoro's default lookup path through a symlink.
 if [[ -e "$DEFAULT_MIHORO_CONFIG" && ! -L "$DEFAULT_MIHORO_CONFIG" ]]; then
@@ -178,13 +243,7 @@ done
 echo "Installed user commands to: $LOCAL_BIN"
 
 if ! command -v mihoro >/dev/null 2>&1 && [[ ! -x "$LOCAL_BIN/mihoro" ]]; then
-  if [[ -z "$TEMP_DIR" ]]; then
-    TEMP_DIR="$(mktemp -d)"
-  fi
-  mihoro_installer="$TEMP_DIR/mihoro-install.sh"
-  echo 'Downloading the official Mihoro installer ...'
-  curl -fsSL "$MIHORO_INSTALL_URL" -o "$mihoro_installer"
-  sh "$mihoro_installer"
+  install_mihoro
 else
   echo 'Skipping Mihoro installation: already installed.'
 fi
