@@ -1,0 +1,147 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SESSION="${MIHOMO_TMUX_SESSION:-mihomo}"
+BIN="${MIHOMO_BIN:-$HOME/.local/bin/mihomo}"
+CONFIG_DIR="${MIHOMO_CONFIG_DIR:-$HOME/.config/mihomo}"
+NORMALIZER="${MIHOMO_GEODATA_NORMALIZER:-$HOME/.local/bin/mihomo-normalize-geodata}"
+START_WAIT="${MIHOMO_START_WAIT:-1}"
+
+usage() {
+  cat <<'USAGE'
+Usage: mihomo-tmux [command]
+
+Commands:
+  start      Start Mihomo in a detached tmux session (default)
+  status     Report whether the session is running
+  logs       Print the latest 200 lines from the tmux pane
+  attach     Attach to the Mihomo tmux session
+  restart    Stop and start the session
+  stop       Stop the session
+  help       Show this help
+
+Default behavior:
+  - Uses tmux session name `mihomo`.
+  - Reads ~/.config/mihomo/config.yaml.
+  - Runs ~/.local/bin/mihomo.
+  - Normalizes GeoData filenames before validation and startup.
+  - Does not configure systemd or boot-time startup.
+
+Environment:
+  MIHOMO_TMUX_SESSION         tmux session name
+  MIHOMO_BIN                  Mihomo binary path
+  MIHOMO_CONFIG_DIR           Mihomo config directory
+  MIHOMO_GEODATA_NORMALIZER   normalization command path
+  MIHOMO_START_WAIT           startup check delay in seconds
+USAGE
+}
+
+require_tmux() {
+  if ! command -v tmux >/dev/null 2>&1; then
+    echo "Required command not found: tmux" >&2
+    echo "Ask the server administrator to install tmux." >&2
+    return 1
+  fi
+}
+
+session_exists() {
+  tmux has-session -t "=$SESSION" 2>/dev/null
+}
+
+start() {
+  require_tmux
+
+  if session_exists; then
+    echo "Mihomo is already running (tmux session: $SESSION)."
+    return 0
+  fi
+
+  if [[ ! -x "$BIN" ]]; then
+    echo "Mihomo core not found or not executable: $BIN" >&2
+    echo "Run: mihoro init" >&2
+    return 1
+  fi
+
+  if [[ ! -f "$CONFIG_DIR/config.yaml" ]]; then
+    echo "Mihomo config not found: $CONFIG_DIR/config.yaml" >&2
+    echo "Run: mihoro init" >&2
+    return 1
+  fi
+
+  if [[ -x "$NORMALIZER" ]]; then
+    "$NORMALIZER" --quiet
+  fi
+
+  if ! "$BIN" -t -d "$CONFIG_DIR"; then
+    echo "Mihomo configuration validation failed." >&2
+    return 1
+  fi
+
+  local command_line
+  printf -v command_line 'exec %q -d %q' "$BIN" "$CONFIG_DIR"
+  tmux new-session -d -s "$SESSION" "$command_line"
+
+  sleep "$START_WAIT"
+  if ! session_exists; then
+    echo "Mihomo exited immediately after startup." >&2
+    echo "Run in the foreground to inspect the error:" >&2
+    printf '  %q -d %q\n' "$BIN" "$CONFIG_DIR" >&2
+    return 1
+  fi
+
+  echo "Mihomo started (tmux session: $SESSION)."
+}
+
+command_name="${1:-start}"
+case "$command_name" in
+  start)
+    start
+    ;;
+  status)
+    require_tmux
+    if session_exists; then
+      echo "Mihomo is running (tmux session: $SESSION)."
+    else
+      echo "Mihomo is not running."
+      exit 1
+    fi
+    ;;
+  logs)
+    require_tmux
+    if ! session_exists; then
+      echo "Mihomo is not running." >&2
+      exit 1
+    fi
+    tmux capture-pane -p -t "=$SESSION" -S -200
+    ;;
+  attach)
+    require_tmux
+    if ! session_exists; then
+      echo "Mihomo is not running." >&2
+      exit 1
+    fi
+    exec tmux attach-session -t "=$SESSION"
+    ;;
+  restart)
+    require_tmux
+    tmux kill-session -t "=$SESSION" 2>/dev/null || true
+    start
+    ;;
+  stop)
+    require_tmux
+    if session_exists; then
+      tmux kill-session -t "=$SESSION"
+      echo "Mihomo stopped."
+    else
+      echo "Mihomo is not running."
+    fi
+    ;;
+  help|-h|--help)
+    usage
+    ;;
+  *)
+    echo "Unknown command: $command_name" >&2
+    usage >&2
+    exit 2
+    ;;
+esac
