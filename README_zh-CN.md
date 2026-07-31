@@ -51,6 +51,20 @@ bash install.sh --enable-codex
 bash install.sh --init
 ```
 
+## 一句话卸载
+
+只移除本仓库安装的命令和 Shell hook，保留 Mihoro、Mihomo、订阅和配置：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zijian-Wu/mihomo-user-kit/main/uninstall.sh | bash
+```
+
+彻底删除全部用户级 Mihoro/Mihomo 文件和配置：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zijian-Wu/mihomo-user-kit/main/uninstall.sh | bash -s -- --purge --yes
+```
+
 ## 命令
 
 | 命令 | 用途 |
@@ -60,6 +74,7 @@ bash install.sh --init
 | `mihomo-update-geodata --help` | 更新并规范化 GeoSite/GeoIP 文件 |
 | `mihomo-normalize-geodata --help` | 只修正 GeoData 文件名和软链接 |
 | `mihoro --help` | 查看 Mihoro 原生命令 |
+| `bash uninstall.sh --help` | 查看安全卸载和彻底清理选项 |
 
 常用操作：
 
