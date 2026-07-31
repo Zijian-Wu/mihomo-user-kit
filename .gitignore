@@ -1,0 +1,10 @@
+# User subscriptions, generated configs, binaries, and runtime data
+*.toml
+config.yaml
+GeoSite.dat
+GeoIP.dat
+geosite.dat
+geoip.dat
+country.mmdb
+ui/
+.cache/
