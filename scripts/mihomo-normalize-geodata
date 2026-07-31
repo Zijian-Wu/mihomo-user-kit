@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_DIR="${MIHOMO_CONFIG_DIR:-$HOME/.config/mihomo}"
+QUIET=0
+CHANGED=0
+
+usage() {
+  cat <<'USAGE'
+Usage: mihomo-normalize-geodata [--quiet]
+
+Normalize Mihoro's lowercase GeoData filenames to Mihomo's canonical names:
+  geosite.dat -> GeoSite.dat
+  geoip.dat   -> GeoIP.dat
+
+The canonical file holds the data. A lowercase compatibility symlink is kept
+so later `mihoro update --geodata` runs continue to work.
+
+Options:
+  --quiet      Suppress the summary message
+  -h, --help   Show this help
+
+Environment:
+  MIHOMO_CONFIG_DIR   Config directory (default: ~/.config/mihomo)
+USAGE
+}
+
+while (( $# > 0 )); do
+  case "$1" in
+    --quiet) QUIET=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+normalize_pair() {
+  local lower_name="$1"
+  local canonical_name="$2"
+  local lower_path="$CONFIG_DIR/$lower_name"
+  local canonical_path="$CONFIG_DIR/$canonical_name"
+
+  if [[ -L "$lower_path" ]]; then
+    if [[ "$(readlink "$lower_path")" == "$canonical_name" && -f "$canonical_path" ]]; then
+      return 0
+    fi
+    rm -f -- "$lower_path"
+    CHANGED=1
+  fi
+
+  # Mihoro currently writes lowercase names. Treat that file as the newest
+  # copy and replace the canonical file when both exist.
+  if [[ -f "$lower_path" ]]; then
+    mv -f -- "$lower_path" "$canonical_path"
+    CHANGED=1
+  fi
+
+  if [[ -f "$canonical_path" ]]; then
+    ln -sfn -- "$canonical_name" "$lower_path"
+    CHANGED=1
+  fi
+}
+
+mkdir -p -- "$CONFIG_DIR"
+normalize_pair geosite.dat GeoSite.dat
+normalize_pair geoip.dat GeoIP.dat
+
+if (( ! QUIET )); then
+  if (( CHANGED )); then
+    echo "GeoData filenames normalized in: $CONFIG_DIR"
+  else
+    echo "No GeoSite/GeoIP DAT files found; nothing changed."
+  fi
+fi
