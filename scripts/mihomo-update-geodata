@@ -1,0 +1,115 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MIHORO_BIN="${MIHORO_CLI:-$HOME/.local/bin/mihoro}"
+NORMALIZER="${MIHOMO_GEODATA_NORMALIZER:-$HOME/.local/bin/mihomo-normalize-geodata}"
+MANAGER="${MIHOMO_TMUX_BIN:-$HOME/.local/bin/mihomo-tmux}"
+MIHORO_CONFIG="${MIHORO_CONFIG:-$HOME/.config/mihomo/mihoro.toml}"
+RESTART=1
+
+usage() {
+  cat <<'USAGE'
+Usage: mihomo-update-geodata [--no-restart]
+
+Update GeoSite/GeoIP through Mihoro, normalize the filenames, and restart the
+tmux-managed Mihomo process only when it was already running.
+
+Requirements:
+  `geodata_mode = true` must be set under [mihomo_config] in mihoro.toml.
+
+Options:
+  --no-restart   Do not restart Mihomo after the update
+  -h, --help     Show this help
+
+Environment:
+  MIHORO_CLI                   Mihoro executable path
+  MIHORO_CONFIG                Mihoro config path
+  MIHOMO_GEODATA_NORMALIZER    normalization command path
+  MIHOMO_TMUX_BIN              mihomo-tmux command path
+USAGE
+}
+
+while (( $# > 0 )); do
+  case "$1" in
+    --no-restart) RESTART=0 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+if [[ ! -f "$MIHORO_CONFIG" && -f "$HOME/.config/mihoro.toml" ]]; then
+  MIHORO_CONFIG="$HOME/.config/mihoro.toml"
+fi
+
+if [[ ! -x "$MIHORO_BIN" ]]; then
+  echo "Mihoro not found or not executable: $MIHORO_BIN" >&2
+  exit 1
+fi
+
+if [[ ! -f "$MIHORO_CONFIG" ]]; then
+  echo "Mihoro config not found: $MIHORO_CONFIG" >&2
+  echo "Run: mihoro init" >&2
+  exit 1
+fi
+
+if [[ ! -x "$NORMALIZER" ]]; then
+  echo "GeoData normalizer not found or not executable: $NORMALIZER" >&2
+  exit 1
+fi
+
+geodata_mode_enabled() {
+  local in_target_section=0
+  local line section
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%%#*}"
+
+    if [[ "$line" =~ ^[[:space:]]*\[([^]]+)\][[:space:]]*$ ]]; then
+      section="${BASH_REMATCH[1]}"
+      if [[ "$section" == "mihomo_config" ]]; then
+        in_target_section=1
+      else
+        in_target_section=0
+      fi
+      continue
+    fi
+
+    if (( in_target_section )) &&
+       [[ "$line" =~ ^[[:space:]]*geodata_mode[[:space:]]*=[[:space:]]*true[[:space:]]*$ ]]; then
+      return 0
+    fi
+  done < "$MIHORO_CONFIG"
+
+  return 1
+}
+
+if ! geodata_mode_enabled; then
+  cat >&2 <<NOTICE
+GeoSite/GeoIP DAT mode is not enabled.
+Set the following under [mihomo_config] in:
+  $MIHORO_CONFIG
+
+  geodata_mode = true
+
+With geodata_mode = false, Mihoro updates country.mmdb instead of DAT files.
+NOTICE
+  exit 2
+fi
+
+was_running=0
+if [[ -x "$MANAGER" ]] && "$MANAGER" status >/dev/null 2>&1; then
+  was_running=1
+fi
+
+"$MIHORO_BIN" update --geodata
+"$NORMALIZER"
+
+if (( RESTART && was_running )); then
+  "$MANAGER" restart
+  echo "GeoData updated and Mihomo restarted."
+elif (( was_running )); then
+  echo "GeoData updated; Mihomo was left running without a restart."
+else
+  echo "GeoData updated; Mihomo is not currently running."
+fi
