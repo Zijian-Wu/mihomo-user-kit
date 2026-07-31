@@ -1,0 +1,86 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  shell:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Bash syntax
+        run: |
+          bash -n install.sh uninstall.sh \
+            scripts/mihomo-tmux \
+            scripts/with-mihomo \
+            scripts/mihomo-normalize-geodata \
+            scripts/mihomo-update-geodata \
+            scripts/codex-proxy.sh
+
+      - name: Check help commands
+        run: |
+          bash install.sh --help >/dev/null
+          bash uninstall.sh --help >/dev/null
+          bash scripts/mihomo-tmux --help >/dev/null
+          bash scripts/with-mihomo --help >/dev/null
+          bash scripts/mihomo-normalize-geodata --help >/dev/null
+          bash scripts/mihomo-update-geodata --help >/dev/null
+
+      - name: Test GeoData normalization
+        run: |
+          test_home="$(mktemp -d)"
+          config_dir="$test_home/.config/mihomo"
+          mkdir -p "$config_dir"
+          printf 'site-data' > "$config_dir/geosite.dat"
+          printf 'ip-data' > "$config_dir/geoip.dat"
+
+          HOME="$test_home" bash scripts/mihomo-normalize-geodata --quiet
+
+          test -f "$config_dir/GeoSite.dat"
+          test -f "$config_dir/GeoIP.dat"
+          test -L "$config_dir/geosite.dat"
+          test -L "$config_dir/geoip.dat"
+          test "$(readlink "$config_dir/geosite.dat")" = 'GeoSite.dat'
+          test "$(readlink "$config_dir/geoip.dat")" = 'GeoIP.dat'
+
+      - name: Test safe uninstall
+        run: |
+          test_home="$(mktemp -d)"
+          mkdir -p "$test_home/.local/bin" "$test_home/.config/mihomo/shell"
+          touch "$test_home/.local/bin/mihoro" "$test_home/.local/bin/mihomo"
+          touch "$test_home/.config/mihomo/mihoro.toml"
+          touch "$test_home/.config/mihomo/shell/codex-proxy.sh"
+          for name in mihomo-tmux with-mihomo mihomo-normalize-geodata mihomo-update-geodata; do
+            touch "$test_home/.local/bin/$name"
+          done
+          source_line="source \"$test_home/.config/mihomo/shell/codex-proxy.sh\""
+          printf '%s\n' "$source_line" > "$test_home/.bashrc"
+
+          HOME="$test_home" bash uninstall.sh
+
+          test -f "$test_home/.local/bin/mihoro"
+          test -f "$test_home/.local/bin/mihomo"
+          test -f "$test_home/.config/mihomo/mihoro.toml"
+          test ! -e "$test_home/.local/bin/mihomo-tmux"
+          test ! -e "$test_home/.config/mihomo/shell/codex-proxy.sh"
+          ! grep -qxF "$source_line" "$test_home/.bashrc"
+
+      - name: Test purge uninstall
+        run: |
+          test_home="$(mktemp -d)"
+          mkdir -p "$test_home/.local/bin" "$test_home/.config/mihomo"
+          touch "$test_home/.local/bin/mihoro" "$test_home/.local/bin/mihomo"
+          touch "$test_home/.config/mihomo/mihoro.toml"
+          ln -s "$test_home/.config/mihomo/mihoro.toml" "$test_home/.config/mihoro.toml"
+
+          HOME="$test_home" bash uninstall.sh --purge --yes
+
+          test ! -e "$test_home/.local/bin/mihoro"
+          test ! -e "$test_home/.local/bin/mihomo"
+          test ! -e "$test_home/.config/mihomo"
+          test ! -e "$test_home/.config/mihoro.toml"
