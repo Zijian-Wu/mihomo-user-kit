@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+MIHORO_BIN="${MIHORO_CLI:-$HOME/.local/bin/mihoro}"
+MANAGER_BIN="${MIHOMO_TMUX_BIN:-$HOME/.local/bin/mihomo-tmux}"
+
+usage() {
+  cat <<'USAGE'
+Usage: with-mihomo [--] <command> [args...]
+
+Start Mihomo when needed, export Mihoro proxy variables in this process, and
+replace this process with the requested command. The parent shell is unchanged.
+
+Examples:
+  with-mihomo curl -I https://github.com
+  with-mihomo git clone https://github.com/owner/repository.git
+  with-mihomo codex
+
+Environment:
+  MIHORO_CLI       Mihoro executable path
+  MIHOMO_TMUX_BIN  mihomo-tmux executable path
+USAGE
+}
+
+case "${1:-}" in
+  -h|--help|help)
+    usage
+    exit 0
+    ;;
+  --)
+    shift
+    ;;
+esac
+
+if (( $# == 0 )); then
+  usage >&2
+  exit 2
+fi
+
+if [[ ! -x "$MIHORO_BIN" ]]; then
+  echo "Mihoro not found or not executable: $MIHORO_BIN" >&2
+  exit 1
+fi
+
+if [[ ! -x "$MANAGER_BIN" ]]; then
+  echo "mihomo-tmux not found or not executable: $MANAGER_BIN" >&2
+  exit 1
+fi
+
+"$MANAGER_BIN" start >/dev/null
+eval "$("$MIHORO_BIN" proxy export)"
+exec "$@"
