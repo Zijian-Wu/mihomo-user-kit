@@ -51,6 +51,20 @@ bash install.sh --enable-codex
 bash install.sh --init
 ```
 
+## One-line uninstall
+
+Remove only this kit's commands and shell hooks while keeping Mihoro, Mihomo, the subscription, and configuration:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zijian-Wu/mihomo-user-kit/main/uninstall.sh | bash
+```
+
+Permanently delete all user-level Mihoro/Mihomo files and configuration:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Zijian-Wu/mihomo-user-kit/main/uninstall.sh | bash -s -- --purge --yes
+```
+
 ## Commands
 
 | Command | Purpose |
@@ -60,6 +74,7 @@ bash install.sh --init
 | `mihomo-update-geodata --help` | Update and normalize GeoSite/GeoIP files |
 | `mihomo-normalize-geodata --help` | Normalize GeoData filenames and symlinks only |
 | `mihoro --help` | Show native Mihoro commands |
+| `bash uninstall.sh --help` | Show safe removal and purge options |
 
 Common operations:
 
