@@ -36,6 +36,17 @@ while (( $# > 0 )); do
   shift
 done
 
+# Resolve symlinks before the atomic replacement so
+# ~/.config/mihoro.toml remains linked to the centralized config.
+while [[ -L "$CONFIG_FILE" ]]; do
+  link_target="$(readlink "$CONFIG_FILE")"
+  if [[ "$link_target" == /* ]]; then
+    CONFIG_FILE="$link_target"
+  else
+    CONFIG_FILE="$(dirname -- "$CONFIG_FILE")/$link_target"
+  fi
+done
+
 if [[ ! -f "$CONFIG_FILE" ]]; then
   echo "Mihoro config not found: $CONFIG_FILE" >&2
   exit 1
