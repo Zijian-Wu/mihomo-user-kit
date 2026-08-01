@@ -256,10 +256,21 @@ else
   echo 'Skipping Mihoro installation: already installed.'
 fi
 
+if [[ -x "$LOCAL_BIN/mihoro" ]]; then
+  MIHORO_BIN="$LOCAL_BIN/mihoro"
+else
+  MIHORO_BIN="$(command -v mihoro || true)"
+fi
+
+if [[ -z "$MIHORO_BIN" || ! -x "$MIHORO_BIN" ]]; then
+  echo 'Mihoro executable could not be resolved after installation.' >&2
+  exit 1
+fi
+
 # Trigger Mihoro's own default-config writer without downloading anything.
 # It exits non-zero because the subscription URL is empty; that is expected.
 if [[ ! -f "$DEFAULT_MIHORO_CONFIG" ]]; then
-  "$LOCAL_BIN/mihoro" status >/dev/null 2>&1 || true
+  "$MIHORO_BIN" status >/dev/null 2>&1 || true
 fi
 
 if [[ ! -f "$DEFAULT_MIHORO_CONFIG" ]]; then
@@ -281,7 +292,7 @@ fi
 
 if (( RUN_INIT )); then
   set +e
-  "$LOCAL_BIN/mihoro" init
+  "$MIHORO_BIN" init
   init_status=$?
   set -e
 
