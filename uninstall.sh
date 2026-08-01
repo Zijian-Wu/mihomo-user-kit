@@ -66,7 +66,8 @@ for command_name in \
   mihomo-tmux \
   with-mihomo \
   mihomo-normalize-geodata \
-  mihomo-update-geodata; do
+  mihomo-update-geodata \
+  mihomo-set-user-agent; do
   rm -f -- "$LOCAL_BIN/$command_name"
 done
 
