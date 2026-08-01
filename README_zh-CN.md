@@ -7,7 +7,7 @@
 ## 需求
 
 - Linux，且可写入自己的 `$HOME`；
-- 必需命令：`bash`、`curl`、`tar`、`tmux` 和常见 coreutils；
+- 必需命令：`bash`、`curl`、`tar`、`tmux`、`awk` 和常见 coreutils；
 - 不需要 `sudo`，但缺少依赖时需要管理员协助安装；
 - 一个 Mihomo/Clash 订阅 URL。
 
@@ -38,7 +38,8 @@ bash install.sh
 - 不运行 `sudo`、系统包管理器、`systemctl`，也不配置开机自启；
 - 缺少依赖时只提示，不自动提权安装；
 - 已安装的 Mihoro 不会被覆盖；
-- 默认只安装，不初始化、不启动代理；
+- 在下载订阅前创建或更新 Mihoro 配置，并设置 `mihoro_user_agent = "mihomo"`；
+- 除非使用 `--init`，否则不下载订阅、不启动代理；
 - 将 `~/.config/mihoro.toml` 链接到 `~/.config/mihomo/mihoro.toml`，便于集中管理；
 - 用 tmux 保持 Mihomo 在 SSH 断开后继续运行。
 
@@ -71,6 +72,7 @@ curl -fsSL https://raw.githubusercontent.com/Zijian-Wu/mihomo-user-kit/main/unin
 |---|---|
 | `mihomo-tmux --help` | 查看启动、状态、日志、重启和停止命令 |
 | `with-mihomo --help` | 仅让一条命令临时使用代理 |
+| `mihomo-set-user-agent --help` | 将 Mihoro 订阅请求的 User-Agent 设置为 `mihomo` |
 | `mihomo-update-geodata --help` | 更新并规范化 GeoSite/GeoIP 文件 |
 | `mihomo-normalize-geodata --help` | 只修正 GeoData 文件名和软链接 |
 | `mihoro --help` | 查看 Mihoro 原生命令 |
@@ -94,6 +96,21 @@ eval "$(mihoro proxy unset)"
 with-mihomo curl -I https://github.com
 with-mihomo git clone https://github.com/owner/repository.git
 with-mihomo codex
+```
+
+## 订阅 User-Agent
+
+安装器会在首次执行 `mihoro init` 下载订阅前写入顶层配置：
+
+```toml
+mihoro_user_agent = "mihomo"
+```
+
+修复已有配置：
+
+```bash
+mihomo-set-user-agent
+grep '^mihoro_user_agent' ~/.config/mihomo/mihoro.toml
 ```
 
 ## GeoData
