@@ -18,6 +18,7 @@ jobs:
           bash -n install.sh uninstall.sh \
             scripts/mihomo-tmux \
             scripts/with-mihomo \
+            scripts/mihomo-set-user-agent \
             scripts/mihomo-normalize-geodata \
             scripts/mihomo-update-geodata \
             scripts/codex-proxy.sh
@@ -28,8 +29,30 @@ jobs:
           bash uninstall.sh --help >/dev/null
           bash scripts/mihomo-tmux --help >/dev/null
           bash scripts/with-mihomo --help >/dev/null
+          bash scripts/mihomo-set-user-agent --help >/dev/null
           bash scripts/mihomo-normalize-geodata --help >/dev/null
           bash scripts/mihomo-update-geodata --help >/dev/null
+
+      - name: Test Mihoro User-Agent configuration
+        run: |
+          test_home="$(mktemp -d)"
+          config_dir="$test_home/.config/mihomo"
+          mkdir -p "$config_dir"
+          cat > "$config_dir/mihoro.toml" <<'EOF'
+          remote_config_url = "https://example.com/subscription"
+          mihoro_user_agent = "mihoro"
+
+          [mihomo_config]
+          geodata_mode = true
+          EOF
+          ln -s "$config_dir/mihoro.toml" "$test_home/.config/mihoro.toml"
+
+          HOME="$test_home" bash scripts/mihomo-set-user-agent \
+            --config "$test_home/.config/mihoro.toml" --quiet
+
+          test -L "$test_home/.config/mihoro.toml"
+          grep -qx 'mihoro_user_agent = "mihomo"' "$config_dir/mihoro.toml"
+          test "$(grep -c '^mihoro_user_agent[[:space:]]*=' "$config_dir/mihoro.toml")" -eq 1
 
       - name: Test GeoData normalization
         run: |
@@ -55,7 +78,7 @@ jobs:
           touch "$test_home/.local/bin/mihoro" "$test_home/.local/bin/mihomo"
           touch "$test_home/.config/mihomo/mihoro.toml"
           touch "$test_home/.config/mihomo/shell/codex-proxy.sh"
-          for name in mihomo-tmux with-mihomo mihomo-normalize-geodata mihomo-update-geodata; do
+          for name in mihomo-tmux with-mihomo mihomo-set-user-agent mihomo-normalize-geodata mihomo-update-geodata; do
             touch "$test_home/.local/bin/$name"
           done
           source_line="source \"$test_home/.config/mihomo/shell/codex-proxy.sh\""
@@ -67,6 +90,7 @@ jobs:
           test -f "$test_home/.local/bin/mihomo"
           test -f "$test_home/.config/mihomo/mihoro.toml"
           test ! -e "$test_home/.local/bin/mihomo-tmux"
+          test ! -e "$test_home/.local/bin/mihomo-set-user-agent"
           test ! -e "$test_home/.config/mihomo/shell/codex-proxy.sh"
           ! grep -qxF "$source_line" "$test_home/.bashrc"
 
