@@ -7,7 +7,7 @@ A user-level Mihoro/Mihomo setup for **headless Linux environments without sudo 
 ## Requirements
 
 - Linux with write access to your own `$HOME`;
-- `bash`, `curl`, `tar`, `tmux`, and common coreutils;
+- `bash`, `curl`, `tar`, `tmux`, `awk`, and common coreutils;
 - No sudo access is required, but an administrator must install missing packages;
 - A Mihomo/Clash subscription URL.
 
@@ -38,7 +38,8 @@ bash install.sh
 - Never runs `sudo`, a system package manager, `systemctl`, or configures boot startup;
 - Reports missing dependencies without attempting privilege escalation;
 - Does not overwrite an existing Mihoro installation;
-- Installs only by default: no initialization and no proxy startup;
+- Creates or updates Mihoro's config with `mihoro_user_agent = "mihomo"` before any subscription download;
+- Does not download the subscription or start the proxy unless `--init` is used;
 - Links `~/.config/mihoro.toml` to `~/.config/mihomo/mihoro.toml` for centralized configuration;
 - Uses tmux so Mihomo survives SSH disconnects.
 
@@ -71,6 +72,7 @@ curl -fsSL https://raw.githubusercontent.com/Zijian-Wu/mihomo-user-kit/main/unin
 |---|---|
 | `mihomo-tmux --help` | Start, inspect, attach, restart, or stop Mihomo |
 | `with-mihomo --help` | Proxy one command without changing the parent shell |
+| `mihomo-set-user-agent --help` | Set Mihoro's subscription User-Agent to `mihomo` |
 | `mihomo-update-geodata --help` | Update and normalize GeoSite/GeoIP files |
 | `mihomo-normalize-geodata --help` | Normalize GeoData filenames and symlinks only |
 | `mihoro --help` | Show native Mihoro commands |
@@ -94,6 +96,21 @@ eval "$(mihoro proxy unset)"
 with-mihomo curl -I https://github.com
 with-mihomo git clone https://github.com/owner/repository.git
 with-mihomo codex
+```
+
+## Subscription User-Agent
+
+The installer sets this top-level field before the first `mihoro init` download:
+
+```toml
+mihoro_user_agent = "mihomo"
+```
+
+To repair an existing configuration manually:
+
+```bash
+mihomo-set-user-agent
+grep '^mihoro_user_agent' ~/.config/mihomo/mihoro.toml
 ```
 
 ## GeoData
