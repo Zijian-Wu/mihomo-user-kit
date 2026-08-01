@@ -1,0 +1,81 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CONFIG_FILE="${MIHOMO_CONFIG_FILE:-${MIHOMO_CONFIG_DIR:-$HOME/.config/mihomo}/mihoro.toml}"
+QUIET=0
+
+usage() {
+  cat <<'USAGE'
+Usage: mihomo-set-user-agent [options]
+
+Set the top-level Mihoro configuration field to:
+  mihoro_user_agent = "mihomo"
+
+Options:
+  --config PATH    Mihoro TOML file to update
+  --quiet          Suppress the success message
+  -h, --help       Show this help
+
+Environment:
+  MIHOMO_CONFIG_DIR   Config directory (default: ~/.config/mihomo)
+  MIHOMO_CONFIG_FILE  Explicit Mihoro TOML path
+USAGE
+}
+
+while (( $# > 0 )); do
+  case "$1" in
+    --config)
+      [[ $# -ge 2 ]] || { echo '--config requires a path' >&2; exit 2; }
+      CONFIG_FILE="$2"
+      shift
+      ;;
+    --quiet) QUIET=1 ;;
+    -h|--help) usage; exit 0 ;;
+    *) echo "Unknown option: $1" >&2; usage >&2; exit 2 ;;
+  esac
+  shift
+done
+
+if [[ ! -f "$CONFIG_FILE" ]]; then
+  echo "Mihoro config not found: $CONFIG_FILE" >&2
+  exit 1
+fi
+
+config_dir="$(dirname -- "$CONFIG_FILE")"
+temp_file="$(mktemp "$config_dir/.mihoro.toml.XXXXXX")"
+trap 'rm -f -- "$temp_file"' EXIT
+
+awk '
+BEGIN {
+  inserted = 0
+}
+{
+  if ($0 ~ /^[[:space:]]*mihoro_user_agent[[:space:]]*=/) {
+    if (!inserted) {
+      print "mihoro_user_agent = \"mihomo\""
+      inserted = 1
+    }
+    next
+  }
+
+  if (!inserted && $0 ~ /^[[:space:]]*\[/) {
+    print "mihoro_user_agent = \"mihomo\""
+    inserted = 1
+  }
+
+  print
+}
+END {
+  if (!inserted) {
+    print "mihoro_user_agent = \"mihomo\""
+  }
+}
+' "$CONFIG_FILE" > "$temp_file"
+
+chmod --reference="$CONFIG_FILE" "$temp_file" 2>/dev/null || true
+mv -- "$temp_file" "$CONFIG_FILE"
+trap - EXIT
+
+if (( ! QUIET )); then
+  echo "Set mihoro_user_agent = \"mihomo\" in: $CONFIG_FILE"
+fi
